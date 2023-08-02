@@ -244,131 +244,115 @@ def fixBugs(ep,rafep,dim,shape,nobj,nobjraf, nraf, nobjmax, dimi, dimf):
                 
 
 def verify(ep, dim, shape, nobjmax, npif, izap):
-
     ising = 0
 
-    if(dim == 'x'):
-        nxipif = np.ones((nobjmax+1, shape[1], shape[2])) * npif
-        nxfpif = np.ones((nobjmax+1, shape[1], shape[2])) * npif
+    if dim == 'x':
+        nxipif = np.full((nobjmax + 1, shape[1], shape[2]), npif, dtype=np.int64)
+        nxfpif = np.full((nobjmax + 1, shape[1], shape[2]), npif, dtype=np.int64)
 
-        for k in range(shape[2]):
-            for j in range(shape[1]):
+        mask = np.concatenate((np.zeros((1, shape[1], shape[2]), dtype=bool), ~ep[:-1, :, :]), axis=0)
+        mask_diff = np.diff(mask, axis=0)
 
-                inum = -1
-                iflu = -1
+        i_obj_start, = np.where(mask_diff)
+        i_obj_end, = np.where(mask_diff == -1)
 
-                if ep[0, j, k]:
-                    inum += 1
-                else:
-                    iflu += 1
+        inum = -1
+        iflu = -1
 
-                for i in range(1, shape[0]):
-                    if not ep[i,j,k]:
-                        iflu += 1
-                    elif ep[i,j,k] and not ep[i-1,j,k]:
-                        inum += 1
-                        if inum == 0:
-                            if(iflu - izap < npif):
-                                nxipif[inum,j,k] = iflu - izap
-                                ising +=1
-                            iflu = 0
+        for start, end in zip(i_obj_start, i_obj_end):
+            if not mask[start, 0, 0]:
+                iflu += 1
 
-                        else:
-                            if(iflu - izap < npif):
-                                nxipif[inum,j,k] = iflu - izap
-                                nxfpif[inum-1,j,k] = iflu - izap
-                                ising +=1
-                            iflu = 0
-                    if ep[i,j,k]:
-                        iflu = 0
+            if not mask[end, 0, 0]:
+                if iflu - izap < npif:
+                    nxipif[inum, :, :] = iflu - izap
+                    ising += 1
+                iflu = 0
 
-                if not ep[shape[0]-1,j,k]:
-                    if(iflu - izap < npif):
-                        nxfpif[inum,j,k] = iflu - izap
-                        ising +=1
+            iflu_vec = np.cumsum(~mask[start:end + 1, :, :], axis=0)
 
-        return nxipif, nxfpif 
+            is_start = mask[start, :, :]
+            is_end = mask[end, :, :]
 
-    elif(dim == 'y'):
-        nyipif = np.ones((nobjmax+1, shape[0], shape[2])) * npif
-        nyfpif = np.ones((nobjmax+1, shape[0], shape[2])) * npif
+            inum_vec = np.where(~is_start, iflu_vec, 0)
 
-        for k in range(shape[2]):
-            for i in range(shape[0]):
+            inum += inum_vec[-1, :, :]
 
-                inum = -1
-                iflu = -1
+            if iflu_vec.shape[0] > 1:
+                nxfpif[inum_vec[:-1, :, :]] = iflu_vec[:-1, :, :] - izap
 
-                if ep[i, 0, k]:
-                    inum += 1
-                else:
-                    iflu += 1
+        return nxipif, nxfpif
 
-                for j in range(1, shape[1]):
-                    if not ep[i,j,k]:
-                        iflu += 1
-                    elif ep[i,j,k] and not ep[i,j-1,k]:
-                        inum += 1
-                        if inum == 0:
-                            if(iflu - izap < npif):
-                                nyipif[inum,i,k] = iflu - izap
-                                ising +=1
-                            iflu = 0
+    elif dim == 'y':
+        nyipif = np.full((nobjmax + 1, shape[0], shape[2]), npif, dtype=np.int64)
+        nyfpif = np.full((nobjmax + 1, shape[0], shape[2]), npif, dtype=np.int64)
 
-                        else:
-                            if(iflu - izap < npif):
-                                nyipif[inum,i,k] = iflu - izap
-                                nyfpif[inum-1,i,k] = iflu - izap
-                                ising +=1
-                            iflu = 0
-                    if ep[i,j,k]:
-                        iflu = 0
+        mask = np.concatenate((np.zeros((shape[0], 1, shape[2]), dtype=bool), ~ep[:, :-1, :]), axis=1)
+        mask_diff = np.diff(mask, axis=1)
 
-                if not ep[i,shape[1]-1,k]:
-                    if(iflu - izap < npif):
-                        nzfpif[inum,i,k] = iflu - izap
-                        ising +=1
+        i_obj_start, = np.where(mask_diff)
+        i_obj_end, = np.where(mask_diff == -1)
+
+        inum = -1
+        iflu = -1
+
+        for start, end in zip(i_obj_start, i_obj_end):
+            if not mask[0, start, 0]:
+                iflu += 1
+
+            if not mask[0, end, 0]:
+                if iflu - izap < npif:
+                    nyipif[inum, :, :] = iflu - izap
+                    ising += 1
+                iflu = 0
+
+            iflu_vec = np.cumsum(~mask[:, start:end + 1, :], axis=1)
+
+            is_start = mask[:, start, :]
+            is_end = mask[:, end, :]
+
+            inum_vec = np.where(~is_start, iflu_vec, 0)
+
+            inum += inum_vec[:, -1, :]
+
+            if iflu_vec.shape[1] > 1:
+                nyfpif[inum_vec[:, :-1, :]] = iflu_vec[:, :-1, :] - izap
 
         return nyipif, nyfpif
 
-    elif(dim == 'z'):
-        nzipif = np.ones((nobjmax+1, shape[0], shape[1])) * npif
-        nzfpif = np.ones((nobjmax+1, shape[0], shape[1])) * npif
+    elif dim == 'z':
+        nzipif = np.full((nobjmax + 1, shape[0], shape[1]), npif, dtype=np.int64)
+        nzfpif = np.full((nobjmax + 1, shape[0], shape[1]), npif, dtype=np.int64)
 
-        for j in range(shape[1]):
-            for i in range(shape[0]):
+        mask = np.concatenate((np.zeros((shape[0], shape[1], 1), dtype=bool), ~ep[:, :, :-1]), axis=2)
+        mask_diff = np.diff(mask, axis=2)
 
-                inum = -1
-                iflu = -1
+        i_obj_start, = np.where(mask_diff)
+        i_obj_end, = np.where(mask_diff == -1)
 
-                if ep[i, j, 0]:
-                    inum += 1
-                else:
-                    iflu += 1
+        inum = -1
+        iflu = -1
 
-                for k in range(1, shape[2]):
-                    if not ep[i,j,k]:
-                        iflu += 1
-                    elif ep[i,j,k] and not ep[i,j,k-1]:
-                        inum += 1
-                        if inum == 0:
-                            if(iflu - izap < npif):
-                                nzipif[inum,i,j] = iflu - izap
-                                ising +=1
-                            iflu = 0
+        for start, end in zip(i_obj_start, i_obj_end):
+            if not mask[0, 0, start]:
+                iflu += 1
 
-                        else:
-                            if(iflu - izap < npif):
-                                nzipif[inum,i,j] = iflu - izap
-                                nzfpif[inum-1,i,j] = iflu - izap
-                                ising +=1
-                            iflu = 0
-                    if ep[i,j,k]:
-                        iflu = 0
+            if not mask[0, 0, end]:
+                if iflu - izap < npif:
+                    nzipif[inum, :, :] = iflu - izap
+                    ising += 1
+                iflu = 0
 
-                if not ep[i,j,shape[2]-1]:
-                    if(iflu - izap < npif):
-                        nzfpif[inum,i,j] = iflu - izap
-                        ising +=1
+            iflu_vec = np.cumsum(~mask[:, :, start:end + 1], axis=2)
+
+            is_start = mask[:, :, start]
+            is_end = mask[:, :, end]
+
+            inum_vec = np.where(~is_start, iflu_vec, 0)
+
+            inum += inum_vec[:, :, -1]
+
+            if iflu_vec.shape[2] > 1:
+                nzfpif[inum_vec[:, :, :-1]] = iflu_vec[:, :, :-1] - izap
 
         return nzipif, nzfpif
